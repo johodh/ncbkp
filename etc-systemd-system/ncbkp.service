@@ -1,0 +1,7 @@
+[Unit]
+Description=Nextcloud backup
+
+[Service]
+User=http
+Group=http
+ExecStart=/bin/bash /path/to/ncbkp.sh
