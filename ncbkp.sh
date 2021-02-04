@@ -32,6 +32,14 @@ function log
 	echo $timestamp $event $2 >> $SCRIPTLOG
 }
 
+function failcheck
+{
+if [ $1 != 0 ]; then 
+	log e "$3 of $2 failed. details in $3 log."
+else log s "$3 of $2 successful. details in $3 log."
+fi
+}
+
 # test paths and dependencies
 if [ ! -d $NC_WEBROOT ]; then log e "webroot path $NC_WEBROOT doesn't exist" && break=1; fi
 if [ ! -d $NC_DATA ]; then log e "data path $NC_DATA doesn't exist" && break=1; fi
@@ -62,45 +70,21 @@ if [ -z $enabled ]; then
 else log s "maintenance mode enabled"; fi
 sleep 5
 
-# rsync syntax explained
-# A = preserve ACLs 
-# a = archive (recurse dirs, preserve permissions, save symlinks as symlinks, save modification times, groups, owner, device files)
-# x = dont cross filesystem boundaries
-# P = show progress and keep partially transferred files
-# v = verbose
-# --delete = will delete locally deleted files at target
-
 # send nextcloud data directory to target with rsync
 rsync -AaPxv --delete --log-file=$RSYNCLOG -e "ssh -i $KEYFILE" $NC_DATA $RSYNC_TARGET 
-
-if [ $? != 0 ]; then 
-	log e "rsync of $NC_DATA failed. there's probably more info in the rsync log."
-else log s "rsync sent $NC_DATA successfully. details in rsync log."
-fi
+failcheck $? $NC_DATA "rsync"
 
 # send nextcloud config directory to target with rsync
 rsync -AaPxv --delete --log-file=$RSYNCLOG -e "ssh -i $KEYFILE" $NC_CONFIG_PATH $RSYNC_TARGET 
-
-if [ $? != 0 ]; then 
-	log e "rsync of $NC_CONFIG_PATH failed. there's probably more info in the rsync log."
-else log s "rsync sent $NC_CONFIG_PATH successfully. details in rsync log."
-fi
+failcheck $? $NC_CONFIG_PATH "rsync"
 
 # backup database to file
 mysqldump --single-transaction -h ${DB_HOST} -u ${DB_USER} -p"${DB_PASS}" $DB_NAME > $DB_BKP_PATH
-
-if [ $? != 0 ]; then 
-	log e "database backup failed. see mysqldump log."
-else log s "database sucsessfully backed up to $DB_BKP_PATH"
-fi
+failcheck $? $DB_NAME "mysqldump"
 
 # send database with rsync
 rsync -AaPxv --log-file=$RSYNCLOG -e "ssh -i $KEYFILE" $DB_BKP_PATH $RSYNC_TARGET
-
-if [ $? != 0 ]; then 
-	log e "rsync of database failed. there's probably more info in the rsync log."
-else log s "rsync sent database successfully. details in rsync log."
-fi
+failcheck $? database "rsync"
 
 timestamp=`date +[%Y-%m-%d+%H:%M:%S] | sed 's/+/ /g'`
 
